@@ -1,6 +1,3 @@
-#if !defined PLUGIN_SP
-#define PLUGIN_SP
-
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -25,36 +22,68 @@ public Plugin myinfo =
     url = ""
 };
 
-bool IsClientValid(int client) {
-    int consoleClient = 0;
-    return client > consoleClient && client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client);
-}
-
 bool IsClientInGamePlaying(int client) {
-    if (!IsClientValid(client)) {
+    if (!IsClientInGame(client)) {
         return false;
     }
 
-    return (IsClientInGame(client) && (CS_TEAM_CT == GetClientTeam(client) || CS_TEAM_T == GetClientTeam(client)));
+    int consoleClient = 0;
+    if (client == consoleClient) {
+        return false;
+    }
+
+    if (client > MaxClients) {
+        return false;
+    }
+
+    if (IsClientSourceTV(client)) {
+        return false;
+    }
+
+    return (CS_TEAM_CT == GetClientTeam(client) || CS_TEAM_T == GetClientTeam(client));
+}
+
+int TotalPlayers() {
+    int total = 0;
+
+    for (int i = 1; i < MaxClients; i++) {
+        if (IsClientInGamePlaying(i)) {
+            total = total + 1;
+        }
+    }
+
+    return total;
 }
 
 void ScrambleTeams() {
-    char playerName[MAX_NAME_LENGTH];
-    for (int i = 1; i < MaxClients; i++) {
-        if (!IsClientInGame(i)) {
-            continue;
-        }
-        
-        if (!IsClientInGamePlaying(i)) {
-            continue;
-        }
+    if (TotalPlayers() < 2) {
+        return;
+    }
 
-        int currentTeam = GetClientTeam(i);
-        GetClientName(i, playerName, sizeof(playerName));
-        int randomTeam = GetRandomInt(2, 3);
-        if (currentTeam != randomTeam) {
-            PrintToServer("%s Assigning %s from team %d to team %d", RETAKE_PREFIX, playerName, currentTeam, randomTeam);
-            CS_SwitchTeam(i, randomTeam);
+    bool hasPlayerOnCT = false;
+    bool hasPlayerOnT = false;
+    while (!hasPlayerOnCT || !hasPlayerOnT) {
+        hasPlayerOnCT = false;
+        hasPlayerOnT = false;
+        char playerName[MAX_NAME_LENGTH];
+        for (int i = 1; i < MaxClients; i++) {
+            if (!IsClientInGamePlaying(i)) {
+                continue;
+            }
+
+            int currentTeam = GetClientTeam(i);
+            GetClientName(i, playerName, sizeof(playerName));
+            int randomTeam = GetRandomInt(2, 3);
+            // PrintToServer("%s Player %s on team %d...", RETAKE_PREFIX, playerName, randomTeam);
+            if (currentTeam != randomTeam) {
+                CS_SwitchTeam(i, randomTeam);
+            }
+            if (randomTeam == CS_TEAM_CT) {
+                hasPlayerOnCT = true;
+            }
+            if (randomTeam == CS_TEAM_T) {
+                hasPlayerOnT = true;
+            }
         }
     }
 }
@@ -63,6 +92,7 @@ public Action Command_ScrambleTeams(int client, int args) {
     PrintToConsole(client, "%s Scrambling teams...", RETAKE_PREFIX);
     PrintToChatAll("%s Scrambling teams...", RETAKE_PREFIX);
     ScrambleTeams();
+    g_winStreak = 0;
     CS_TerminateRound(1.5, CSRoundEnd_Draw, false);
     return Plugin_Handled;
 }
